@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
-contract Champz is ERC721AUpgradeable, OwnableUpgradeable {
+contract ChampzPurchase is OwnableUpgradeable {
     using ECDSA for bytes32;
     address public _signer;
     address payable public paymentReceiver;
@@ -14,6 +14,8 @@ contract Champz is ERC721AUpgradeable, OwnableUpgradeable {
     uint256 public MAX_SUPPLY;
     uint256 public MAX_PER_TX;
     uint public priceInPaymentToken;
+
+    uint256 public pricePerSpore;
 
     mapping(uint256 => bool) public keyUsed;
     mapping(uint256 => bool) public lockedChamp;
@@ -40,7 +42,18 @@ contract Champz is ERC721AUpgradeable, OwnableUpgradeable {
         uint256 indexed toToken
     );
 
-    function initialize() public initializerERC721A initializer {
+    event PriceUpdated(uint256 newPrice);
+
+    event SporeBundlesPurchased(
+        address indexed from,
+        uint256[] indexed bundleIds,
+        uint256 indexed pricePerSpore,
+        uint256 indexed sporeAmount
+    );
+
+    function initialize(
+        uint256 initialPricePerSpore
+    ) public initializerERC721A initializer {
         __ERC721A_init("Champz", "CHAMPZ");
         __Ownable_init(msg.sender);
         _signer = 0xc45079F030B88C9242624166EdcEb5B6852A377f;
@@ -48,6 +61,14 @@ contract Champz is ERC721AUpgradeable, OwnableUpgradeable {
         MAX_SUPPLY = 9000;
         MAX_PER_TX = 10;
         priceInPaymentToken = 30000000e18;
+
+        pricePerSpore = initialPricePerSpore;
+    }
+
+    function updatePricePerSpore(uint256 newPrice) public onlyOwner {
+        require(newPrice > 0, "Spore price must be greater than 0");
+        pricePerSpore = newPrice;
+        emit PriceUpdated(newPrice);
     }
 
     function _startTokenId() internal view virtual override returns (uint256) {
@@ -61,7 +82,7 @@ contract Champz is ERC721AUpgradeable, OwnableUpgradeable {
     }
 
     /*-----------------[CLAIM]--------------------------------------------------------*/
-    function claim(
+    function purchase(
         uint256 _key,
         uint256 _timestamp,
         bytes calldata _signature,
@@ -71,35 +92,37 @@ contract Champz is ERC721AUpgradeable, OwnableUpgradeable {
     ) public {
         verifyChampzList(champz);
 
-        bytes32 champzIds = keccak256(abi.encodePacked(champz));
-        verifyKeySignature(_key, _timestamp, champzIds, _purchase, _signature);
+        byte32 bundleIds = keccak256(abi.encodePacked(champz));
 
-        keyUsed[_key] = true;
+        // bytes32 champzIds = keccak256(abi.encodePacked(champz));
+        // verifyKeySignature(_key, _timestamp, champzIds, _purchase, _signature);
 
-        uint256 nextTokenId = _nextTokenId();
+        // keyUsed[_key] = true;
 
-        if (_purchase) {
-            paymentToken.transferFrom(
-                msg.sender,
-                paymentReceiver,
-                priceInPaymentToken
-            );
-        }
+        // uint256 nextTokenId = _nextTokenId();
 
-        uint256 mintQuantity = champz.length;
-        mint(mintQuantity);
+        // if (_purchase) {
+        //     paymentToken.transferFrom(
+        //         msg.sender,
+        //         paymentReceiver,
+        //         priceInPaymentToken
+        //     );
+        // }
 
-        for (uint256 i = 0; i < mintQuantity; i++) {
-            uint256 tokenId = nextTokenId + i;
-            claimedChampz[champz[i]] = true;
-            gameToTokenId[champz[i]] = tokenId;
-            tokenToGameId[tokenId] = champz[i];
-            if (_lock) {
-                lockChamp(tokenId);
-            }
-        }
+        // uint256 mintQuantity = champz.length;
+        // mint(mintQuantity);
 
-        emit TokenClaimed(msg.sender, champz, nextTokenId, _totalMinted());
+        // for (uint256 i = 0; i < mintQuantity; i++) {
+        //     uint256 tokenId = nextTokenId + i;
+        //     claimedChampz[champz[i]] = true;
+        //     gameToTokenId[champz[i]] = tokenId;
+        //     tokenToGameId[tokenId] = champz[i];
+        //     if (_lock) {
+        //         lockChamp(tokenId);
+        //     }
+        // }
+
+        // emit TokenClaimed(msg.sender, champz, nextTokenId, _totalMinted());
     }
 
     /*-----------------[MARKETPLACE FUNCTIONS]--------------------------------------------------------*/
