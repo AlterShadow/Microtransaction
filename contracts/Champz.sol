@@ -7,6 +7,11 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 contract ChampzPurchase is OwnableUpgradeable {
+    struct BundlePurchase {
+        uint256 bundleId;
+        uint256 sporeAmount;
+    }
+
     using ECDSA for bytes32;
     address public _signer;
     address payable public paymentReceiver;
@@ -15,12 +20,12 @@ contract ChampzPurchase is OwnableUpgradeable {
     uint256 public MAX_PER_TX;
     uint public priceInPaymentToken;
 
-    uint256 public pricePerSpore;
+    uint256 public sporePrice;
 
     mapping(uint256 => bool) public keyUsed;
     mapping(uint256 => bool) public lockedChamp;
     mapping(uint256 => uint256) public gameToTokenId;
-    mapping(uint256 => bool) public claimedChampz;
+    mapping(uint256 => bool) public claimedBundle;
     mapping(uint256 => uint256) public tokenToGameId;
 
     IERC20 public paymentToken;
@@ -47,12 +52,12 @@ contract ChampzPurchase is OwnableUpgradeable {
     event SporeBundlesPurchased(
         address indexed from,
         uint256[] indexed bundleIds,
-        uint256 indexed pricePerSpore,
+        uint256 indexed sporePrice,
         uint256 indexed sporeAmount
     );
 
     function initialize(
-        uint256 initialPricePerSpore
+        uint256 initialSporePrice
     ) public initializerERC721A initializer {
         __ERC721A_init("Champz", "CHAMPZ");
         __Ownable_init(msg.sender);
@@ -62,12 +67,12 @@ contract ChampzPurchase is OwnableUpgradeable {
         MAX_PER_TX = 10;
         priceInPaymentToken = 30000000e18;
 
-        pricePerSpore = initialPricePerSpore;
+        sporePrice = initialSporePrice;
     }
 
-    function updatePricePerSpore(uint256 newPrice) public onlyOwner {
+    function updateSporePrice(uint256 newPrice) public onlyOwner {
         require(newPrice > 0, "Spore price must be greater than 0");
-        pricePerSpore = newPrice;
+        sporePrice = newPrice;
         emit PriceUpdated(newPrice);
     }
 
@@ -81,48 +86,51 @@ contract ChampzPurchase is OwnableUpgradeable {
         _safeMint(msg.sender, quantity);
     }
 
-    /*-----------------[CLAIM]--------------------------------------------------------*/
+    // Helper function to calculate total cost
+    function calculateTotalCost(
+        BundlePurchase[] calldata purchases
+    ) public view returns (uint256) {
+        uint256 totalCost = 0;
+        for (uint256 i = 0; i < purchases.length; i++) {
+            totalCost += purchases[i].sporeAmount * sporePrice;
+        }
+        return totalCost;
+    }
+
+    /*-----------------[PURCHASE]--------------------------------------------------------*/
     function purchase(
-        uint256 _key,
         uint256 _timestamp,
         bytes calldata _signature,
-        uint256[] calldata champz,
-        bool _lock,
-        bool _purchase
+        BundlePurchase[] calldata purchases
     ) public {
+        uint256 totalCost = calculateTotalCost(purchases);
+        require(msg.value >= totalCost, "Not enough ETH sent");
+
         verifyChampzList(champz);
 
-        byte32 bundleIds = keccak256(abi.encodePacked(champz));
+        for (uint i = 0; i < purchases.length; i++) {
+            encodedPurchases = abi.encodePacked(
+                encodedPurchases,
+                purchases[i].bundleId,
+                purchases[i].sporeAmount
+            );
+        }
 
-        // bytes32 champzIds = keccak256(abi.encodePacked(champz));
-        // verifyKeySignature(_key, _timestamp, champzIds, _purchase, _signature);
+        bytes32 purchasesHash = keccak256(encodedPurchases);
 
-        // keyUsed[_key] = true;
+        verifyKeySignature(_timestamp, purchasesHash, _signature);
 
-        // uint256 nextTokenId = _nextTokenId();
+        paymentReceiver.transfer(totalCost);
 
-        // if (_purchase) {
-        //     paymentToken.transferFrom(
-        //         msg.sender,
-        //         paymentReceiver,
-        //         priceInPaymentToken
-        //     );
-        // }
+        if (msg.value > totalCost) {
+            payable(msg.sender).transfer(msg.value - totalCost);
+        }
 
-        // uint256 mintQuantity = champz.length;
-        // mint(mintQuantity);
+        for (uint i = 0; i < purchases.length; i++) {
+            claimedBundle[purchases[i].bundleId] = true;
+        }
 
-        // for (uint256 i = 0; i < mintQuantity; i++) {
-        //     uint256 tokenId = nextTokenId + i;
-        //     claimedChampz[champz[i]] = true;
-        //     gameToTokenId[champz[i]] = tokenId;
-        //     tokenToGameId[tokenId] = champz[i];
-        //     if (_lock) {
-        //         lockChamp(tokenId);
-        //     }
-        // }
-
-        // emit TokenClaimed(msg.sender, champz, nextTokenId, _totalMinted());
+        // emit SporeBundlesPurchased(msg.sender, )
     }
 
     /*-----------------[MARKETPLACE FUNCTIONS]--------------------------------------------------------*/
@@ -256,25 +264,18 @@ contract ChampzPurchase is OwnableUpgradeable {
     }
 
     function verifyKeySignature(
-        uint256 _key,
         uint256 _timestamp,
         bytes32 _champz,
-        bool _purchase,
         bytes calldata _signature
     ) private view {
         require(msg.sender == tx.origin, "Only Shrooman beings!");
-        require(!keyUsed[_key], "Key has been used");
         require(
             keccak256(
                 abi.encodePacked(
                     "Claim",
                     msg.sender,
-                    "Key",
-                    _key,
                     "Timestamp",
                     _timestamp,
-                    "Pay",
-                    _purchase,
                     "Champz",
                     _champz
                 )
@@ -286,7 +287,7 @@ contract ChampzPurchase is OwnableUpgradeable {
     function verifyChampzList(uint256[] calldata champz) internal view {
         require(champz.length <= MAX_PER_TX, "exceed MAX_PER_TX");
         for (uint256 i = 0; i < champz.length; i++) {
-            require(!claimedChampz[champz[i]], "Champ has been claimed");
+            require(!claimedBundle[champz[i]], "Champ has been claimed");
         }
     }
 }
