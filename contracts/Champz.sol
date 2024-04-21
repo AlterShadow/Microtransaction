@@ -12,33 +12,11 @@ contract ChampzPurchase is OwnableUpgradeable {
     address public _signer;
     address payable public paymentReceiver;
 
-    uint256 public MAX_SUPPLY;
     uint256 public MAX_PER_TX;
 
     uint256 public sporePrice;
 
-    bytes32 public _hash;
-    bool public isVerified;
-    address public decodedSigner;
-
     mapping(uint256 => bool) public claimedBundle;
-
-    event TokenLocked(
-        uint256 indexed tokenId,
-        address indexed approvedContract
-    );
-
-    event TokenUnlocked(
-        uint256 indexed tokenId,
-        address indexed approvedContract
-    );
-
-    event TokenClaimed(
-        address indexed from,
-        uint256[] char_ids,
-        uint256 indexed fromToken,
-        uint256 indexed toToken
-    );
 
     event PriceUpdated(uint256 newPrice);
 
@@ -53,7 +31,6 @@ contract ChampzPurchase is OwnableUpgradeable {
         __Ownable_init(msg.sender);
         _signer = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
         paymentReceiver = payable(0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC);
-        MAX_SUPPLY = 9000;
         MAX_PER_TX = 10;
 
         sporePrice = initialSporePrice;
