@@ -18,7 +18,7 @@ describe("ChampzPurchase Tests", function () {
     addr1: HardhatEthersSigner,
     paymentReceiver: HardhatEthersSigner;
 
-  function encodePackedUint256Array(array: Array<number>) {
+  function encodePackedUint256Array(array: Array<number> | Array<bigint>) {
     // Convert each element of the array to a hex string
     // and concatenate them into a single string.
     return array
@@ -40,7 +40,7 @@ describe("ChampzPurchase Tests", function () {
     // Deploying the contract as an upgradeable proxy
     champzPurchase = (await hre.upgrades.deployProxy(
       ChampzPurchase,
-      [hre.ethers.parseEther("0.01")], // initialSporePrice as an example
+      [], // initialSporePrice as an example
       { initializer: "initialize" }
     )) as unknown as ChampzPurchaseType;
     await champzPurchase.waitForDeployment();
@@ -56,20 +56,13 @@ describe("ChampzPurchase Tests", function () {
       // The owner should be the first signer
       expect(await champzPurchase.owner()).to.equal(owner.address);
     });
-
-    it("Should set the initial spore price correctly", async function () {
-      // The initial spore price should match the passed value
-      expect(await champzPurchase.sporePrice()).to.equal(
-        hre.ethers.parseEther("0.01")
-      );
-    });
   });
 
   describe("Test purchase function", function () {
     it("Should allow a correct purchase with valid signature", async function () {
       // Sample data for the test
       const bundleIds = [1, 2];
-      const sporeAmounts = [100, 200];
+      const prices = [hre.ethers.parseEther("1"), hre.ethers.parseEther("2")];
       const totalCost = hre.ethers.parseEther("3"); // Ensure this matches sporeAmounts * sporePrice
       //   console.log(await hre.ethers.provider.getBalance(addr1.address));
 
@@ -78,10 +71,10 @@ describe("ChampzPurchase Tests", function () {
 
       // Encode each array into a single hex string
       const encodedBundleIds = encodePackedUint256Array(bundleIds);
-      const encodedSporeAmounts = encodePackedUint256Array(sporeAmounts);
+      const encodedPrices = encodePackedUint256Array(prices);
 
       // Concatenate the encoded strings
-      const concatenatedHex = "0x" + encodedBundleIds + encodedSporeAmounts;
+      const concatenatedHex = "0x" + encodedBundleIds + encodedPrices;
 
       //   console.log(concatenatedHex);
       // Hash the concatenated hex string
@@ -134,17 +127,12 @@ describe("ChampzPurchase Tests", function () {
       await expect(
         champzPurchase
           .connect(addr1)
-          .purchase(timestamp, signature, bundleIds, sporeAmounts, {
+          .purchase(timestamp, signature, bundleIds, prices, {
             value: totalCost,
           })
       )
         .to.emit(champzPurchase, "SporeBundlesPurchased")
-        .withArgs(
-          addr1.address,
-          bundleIds,
-          sporeAmounts,
-          await champzPurchase.sporePrice()
-        );
+        .withArgs(addr1.address, bundleIds, prices);
 
       // Further checks can include validating state changes (e.g., `claimedBundle`)
       for (let bundleId of bundleIds) {

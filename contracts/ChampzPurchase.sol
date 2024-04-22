@@ -14,43 +14,19 @@ contract ChampzPurchase is OwnableUpgradeable {
 
     uint256 public MAX_PER_TX;
 
-    uint256 public sporePrice;
-
     mapping(uint256 => bool) public claimedBundle;
-
-    event PriceUpdated(uint256 newPrice);
 
     event SporeBundlesPurchased(
         address indexed from,
         uint256[] bundleIds,
-        uint256[] sporeAmounts,
-        uint256 indexed sporePrice
+        uint256[] prices
     );
 
-    function initialize(uint256 initialSporePrice) public initializer {
+    function initialize() public initializer {
         __Ownable_init(msg.sender);
         _signer = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
         paymentReceiver = payable(0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC);
         MAX_PER_TX = 10;
-
-        sporePrice = initialSporePrice;
-    }
-
-    function updateSporePrice(uint256 newPrice) public onlyOwner {
-        require(newPrice > 0, "Spore price must be greater than 0");
-        sporePrice = newPrice;
-        emit PriceUpdated(newPrice);
-    }
-
-    // Helper function to calculate total cost
-    function calculateTotalCost(
-        uint256[] calldata sporeAmounts
-    ) public view returns (uint256) {
-        uint256 totalCost = 0;
-        for (uint256 i = 0; i < sporeAmounts.length; i++) {
-            totalCost += sporeAmounts[i] * sporePrice;
-        }
-        return totalCost;
     }
 
     /*-----------------[PURCHASE]--------------------------------------------------------*/
@@ -58,20 +34,23 @@ contract ChampzPurchase is OwnableUpgradeable {
         uint256 _timestamp,
         bytes calldata _signature,
         uint256[] calldata bundleIds,
-        uint256[] calldata sporeAmounts
+        uint256[] calldata prices
     ) public payable {
         require(
-            sporeAmounts.length == bundleIds.length,
+            prices.length == bundleIds.length,
             "Count of Bundles doesn't match with count of their amounts"
         );
-        uint256 totalCost = calculateTotalCost(sporeAmounts);
+        uint256 totalCost = 0;
+
+        for (uint256 i = 0; i < prices.length; i++) {
+            totalCost += prices[i];
+        }
+
         require(msg.value >= totalCost, "Not enough ETH sent");
 
         verifyBundleList(bundleIds);
 
-        bytes32 purchasesHash = keccak256(
-            abi.encodePacked(bundleIds, sporeAmounts)
-        );
+        bytes32 purchasesHash = keccak256(abi.encodePacked(bundleIds, prices));
 
         verifyKeySignature(_timestamp, purchasesHash, _signature);
 
@@ -85,12 +64,7 @@ contract ChampzPurchase is OwnableUpgradeable {
             claimedBundle[bundleIds[i]] = true;
         }
 
-        emit SporeBundlesPurchased(
-            msg.sender,
-            bundleIds,
-            sporeAmounts,
-            sporePrice
-        );
+        emit SporeBundlesPurchased(msg.sender, bundleIds, prices);
     }
 
     /*-----------------[OWNER FUNCTIONS]--------------------------------------------------------*/
